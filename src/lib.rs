@@ -205,6 +205,52 @@ pub fn bgrx_to_gray_chunks_iter_sum_2(
     }
 }
 
+pub fn bgrx_to_gray_split_at(
+    in_data: &[u8],
+    out_data: &mut [u8],
+    in_stride: usize,
+    out_stride: usize,
+    width: usize,
+) {
+    assert_eq!(in_data.len() % 4, 0);
+    assert_eq!(out_data.len() % 4, 0);
+    assert_eq!(out_data.len() / out_stride, in_data.len() / in_stride);
+
+    let in_line_bytes = width * 4;
+    let out_line_bytes = width * 4;
+
+    assert!(in_line_bytes <= in_stride);
+    assert!(out_line_bytes <= out_stride);
+
+    for (in_line, out_line) in in_data
+        .exact_chunks(in_stride)
+        .zip(out_data.exact_chunks_mut(out_stride))
+    {
+        let mut in_pp: &[u8] = in_line[..in_line_bytes].as_ref();
+        let mut out_pp: &mut [u8] = out_line[..out_line_bytes].as_mut();
+        assert!(in_pp.len() == out_pp.len());
+
+        while in_pp.len() >= 4 {
+            let (in_p, in_tmp) = in_pp.split_at(4);
+            let (out_p, out_tmp) = { out_pp }.split_at_mut(4);
+            in_pp = in_tmp;
+            out_pp = out_tmp;
+
+            let b = u32::from(in_p[0]);
+            let g = u32::from(in_p[1]);
+            let r = u32::from(in_p[2]);
+            let x = u32::from(in_p[3]);
+
+            let grey = ((r * RGB_Y[0]) + (g * RGB_Y[1]) + (b * RGB_Y[2]) + (x * RGB_Y[3])) / 65536;
+            let grey = grey as u8;
+            out_p[0] = grey;
+            out_p[1] = grey;
+            out_p[2] = grey;
+            out_p[3] = grey;
+        }
+    }
+}
+
 pub fn bgrx_to_gray_exact_chunks(
     in_data: &[u8],
     out_data: &mut [u8],
@@ -296,6 +342,14 @@ mod tests {
         let mut o = test::black_box(create_vec(1920, 1080));
 
         b.iter(|| bgrx_to_gray_chunks_iter_sum_2(&i, &mut o, 1920 * 4, 1920 * 4, 1920));
+    }
+
+    #[bench]
+    fn bench_split_at_1920x1080(b: &mut Bencher) {
+        let i = test::black_box(create_vec(1920, 1080));
+        let mut o = test::black_box(create_vec(1920, 1080));
+
+        b.iter(|| bgrx_to_gray_split_at(&i, &mut o, 1920 * 4, 1920 * 4, 1920));
     }
 
     #[bench]
