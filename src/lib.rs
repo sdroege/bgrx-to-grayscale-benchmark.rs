@@ -8,7 +8,31 @@ use faster::*;
 
 const RGB_Y: [u32; 4] = [19595, 38470, 7471, 0];
 
-pub fn bgrx_to_gray_chunks_no_asserts_faster(in_data: &[u8], out_data: &mut [u8], in_stride: usize, out_stride: usize, width: usize) {
+pub fn bgrx_to_gray_chunks_no_asserts_faster_unstrided(in_data: &[u8], out_data: &mut [u8]) {
+    // Relies on vector width which is a multiple of 4
+    assert!(u8s::WIDTH % 4 == 0 && u32s::WIDTH % 4 == 0);
+
+    const RGB_Y: [u32; 16] = [19595, 38470, 7471, 0, 19595, 38470, 7471, 0, 19595, 38470, 7471, 0, 19595, 38470, 7471, 0];
+    let rgbvec = u32s::load(&RGB_Y, 0);
+    in_data.simd_iter(u8s(0)).simd_map(|v| {
+        let (a, b) = v.upcast();
+        let (a32, b32) = a.upcast();
+        let (c32, d32) = b.upcast();
+
+        let grey32a = a32 * rgbvec / u32s(65536);
+        let grey32b = b32 * rgbvec / u32s(65536);
+        let grey32c = c32 * rgbvec / u32s(65536);
+        let grey32d = d32 * rgbvec / u32s(65536);
+
+        let grey16a = grey32a.saturating_downcast(grey32b);
+        let grey16b = grey32c.saturating_downcast(grey32d);
+
+        let grey = grey16a.saturating_downcast(grey16b);
+        grey
+    }).scalar_fill(out_data);
+}
+
+pub fn bgrx_to_gray_chunks_no_asserts_faster(in_data: &[u8], out_data: &mut [u8]) {
     // Sane, but slowed down by faster's current striping implementation.
     in_data.stripe_four(tuplify!(4, u8s(0))).zip().simd_map(|(r, g, b, _)| {
         let (r16a, r16b) = r.upcast();
@@ -348,7 +372,15 @@ mod tests {
         let i = test::black_box(create_vec(1920, 1080));
         let mut o = test::black_box(create_vec(1920, 1080));
 
-        b.iter(|| bgrx_to_gray_chunks_no_asserts_faster(&i, &mut o, 1920 * 4, 1920 * 4, 1920));
+        b.iter(|| bgrx_to_gray_chunks_no_asserts_faster(&i, &mut o));
+    }
+
+    #[bench]
+    fn bench_chunks_1920x1080_no_asserts_faster_unstrided(b: &mut Bencher) {
+        let i = test::black_box(create_vec(1920, 1080));
+        let mut o = test::black_box(create_vec(1920, 1080));
+
+        b.iter(|| bgrx_to_gray_chunks_no_asserts_faster_unstrided(&i, &mut o));
     }
 
     #[bench]
@@ -406,7 +438,7 @@ mod tests {
         let mut out_faster = create_vec(1920, 1080);
 
         bgrx_to_gray_chunks_no_asserts(&in_both, &mut out_scalar, 1920 * 4, 1920 * 4, 1920);
-        bgrx_to_gray_chunks_no_asserts_faster(&in_both, &mut out_faster, 1920 * 4, 1920 * 4, 1920);
+        bgrx_to_gray_chunks_no_asserts_faster(&in_both, &mut out_faster);
 
         for i in 0..out_scalar.len() {
             assert_eq!(out_faster[i], out_scalar[i]);
