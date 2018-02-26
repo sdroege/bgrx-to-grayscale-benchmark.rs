@@ -33,8 +33,8 @@ pub fn bgrx_to_gray_chunks_no_asserts_faster_unstrided(in_data: &[u8], out_data:
 }
 
 pub fn bgrx_to_gray_chunks_no_asserts_faster(in_data: &[u8], out_data: &mut [u8]) {
-    // Sane, but slowed down by faster's current striping implementation.
-    in_data.stripe_four(tuplify!(4, u8s(0))).zip().simd_map(|(r, g, b, _)| {
+    // Sane, but slowed down by faster's current striding implementation.
+    in_data.stride_four(tuplify!(4, u8s(0))).zip().simd_map(|(r, g, b, _)| {
         let (r16a, r16b) = r.upcast();
         let (r32a, r32b) = r16a.upcast();
         let (r32c, r32d) = r16b.upcast();
